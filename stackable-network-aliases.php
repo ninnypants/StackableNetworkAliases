@@ -4,7 +4,7 @@ Plugin Name: Stackable Network Alias Creator
 Plugin URI: http://ninnypants.com/
 Description: Auto creates aliases when a WordPress Miltisite site is created on a subdomain install using Stackable's API.
 Author: NINNYPANTS
-Version: .5
+Version: .7
 Author URI: http://ninnypants.com/
 */
 
@@ -52,8 +52,6 @@ function sna_settings(){
 		<div class="postbox">
 			<h3>API Settings</h3>
 			<div class="inside">
-			<!-- <p>Account ID<br />
-			<input type="text" name="account-id" id="account-id" value="<?php echo esc_attr($sna_settings['account-id']); ?>" /></p> -->
 			<p>API Key ID<br />
 			<input type="text" name="api-key-id" id="api-key-id" value="<?php echo esc_attr($sna_settings['api-key-id']); ?>" /></p>
 			<p>API Key<br />
@@ -76,19 +74,24 @@ function sna_settings(){
 
 function sna_search_host_id($api_key_id, $api_key){
 	$ch = curl_init('https://api.stackable.com/Site/find');
+	$json = '{"hostname": "'.$_SERVER['HTTP_HOST'].'"}';
+	$date = date('c');
+	$signature = base64_encode(hash_hmac('sha1', $date.$json, $api_key, true));
 	curl_setopt($ch, CURLOPT_HTTPHEADER, array(
 		'Content-type: application/json',
-		'Stackable-APIKeyID: '.$api_key_id,
-		'Stackable-APIKey: '.$api_key,
+		'Customer-Key-ID: '.$api_key_id,
+		'Signature: '.$signature,
+		'Signature-Version: 1',
+		'Signature-Method: HMAC/SHA1',
+		'Signature-Created: '.$date,
 	));
 	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-	curl_setopt($ch, CURLOPT_POSTFIELDS, '{"hostname": "'.$_SERVER['HTTP_HOST'].'"}');
+	curl_setopt($ch, CURLOPT_POSTFIELDS, $json);
 	curl_setopt($ch, CURLOPT_POST, true);
 	curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 	curl_setopt($ch, CURLOPT_SSLVERSION, 3);
 	curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-	//curl_setopt($ch, CURLOPT_HEADER, ture);
 	$ret = curl_exec($ch);
 	curl_close($ch);
 
@@ -104,22 +107,16 @@ function sna_create_alias($blog_id, $user_id, $domain, $path, $site_id, $meta){
 	$sna_settings = get_site_option('sna_settings');
 	$slug = str_replace(array('http://', '/'), '', $domain);
 	$json = '{"id": '.$sna_settings['host-id'].', "aliases": ["'.$slug.'"], "createDNS": true}';
-	// $date = new DateTime('now', new DateTimeZone('UTC'));
-	// $created = $date->format('Y-m-d').'T'.$date->format('H:i:s').'Z';
-	// $signature = base64_encode(hash_hmac('sha1', $created.$json, $sna_settings['api-key']));
+	$date = date('c');
+	$signature = base64_encode(hash_hmac('sha1', $date.$json, $api_key, true));
 	$ch = curl_init('https://api.stackable.com/Site/addAlias');
-	// curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-	// 	'Content-type: application/json',
-	// 	'Customer-Key-ID: '.$sna_settings['api-key-id'],
-	// 	'Signature: '.$signature,
-	// 	'Signature-Version: 1',
-	// 	'Signature-Method: HMAC/SHA1',
-	// 	'Signature-Created: '.$created,
-	// ));
 	curl_setopt($ch, CURLOPT_HTTPHEADER, array(
 		'Content-type: application/json',
-		'Stackable-APIKeyID: '.$sna_settings['api-key-id'],
-		'Stackable-APIKey: '.$sna_settings['api-key'],
+		'Customer-Key-ID: '.$api_key_id,
+		'Signature: '.$signature,
+		'Signature-Version: 1',
+		'Signature-Method: HMAC/SHA1',
+		'Signature-Created: '.$date,
 	));
 	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 	curl_setopt($ch, CURLOPT_POSTFIELDS, $json);
@@ -132,5 +129,4 @@ function sna_create_alias($blog_id, $user_id, $domain, $path, $site_id, $meta){
 	$ret = curl_exec($ch);
 	$info = curl_getinfo($ch);
 	curl_close($ch);
-	wp_mail('tyrel@ninnypants.com', 'Created Blog', var_export(json_decode($ret), true).var_export($info, true));
 }
